@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 public class Player_Controller : MonoBehaviour
 {
@@ -18,6 +19,10 @@ public class Player_Controller : MonoBehaviour
     [Header("Climb")]
     public float climbSpeed = 3f;
 
+    [Header("Knockback")]
+    public bool isKnockedBack;
+    public float knockbackDuration = 0.3f;
+
     private Animator anim;
     private Rigidbody2D rb;
     private SpriteRenderer sr;
@@ -26,11 +31,11 @@ public class Player_Controller : MonoBehaviour
     private bool isGrounded;
     private bool isCrouching;
 
-    // تسلق
+    // Climb
     private bool isInClimbArea;
     private bool isClimbing;
 
-    // القيم الأصلية للوقوف
+    // Collider values
     private float standColliderHeight;
     private Vector2 standColliderOffset;
     private float originalGravity;
@@ -49,37 +54,37 @@ public class Player_Controller : MonoBehaviour
 
     void Update()
     {
-        // Ground Check
+        // Ground check
         isGrounded = Physics2D.OverlapCircle(
             groundCheck.position,
             groundCheckRadius,
             groundLayer
         );
 
-        // إدخال الانحناء
+        // Crouch
         bool crouchInput = Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S);
-        isCrouching = crouchInput && isGrounded && !isClimbing;
+        isCrouching = crouchInput && isGrounded && !isClimbing && !isKnockedBack;
 
-        //  بدء التسلق: داخل المنطقة + W أو S
-        if (isInClimbArea && Input.GetAxis("Vertical") != 0)
+        // Start climbing
+        if (isInClimbArea && Input.GetAxis("Vertical") != 0 && !isKnockedBack)
         {
             StartClimbing();
         }
 
-        //  إفلات التسلق: لا W ولا S
+        // Stop climbing
         if (isClimbing && Input.GetAxis("Vertical") == 0)
         {
             StopClimbing();
         }
 
-        // أنيميشن
+        // Animations
         anim.SetFloat("speed", Mathf.Abs(Input.GetAxis("Horizontal")));
         anim.SetBool("isgrounded", isGrounded);
         anim.SetBool("isCrouching", isCrouching);
         anim.SetBool("isClimbing", isClimbing);
 
-        // قفز
-        if (Input.GetKeyDown(KeyCode.Space))
+        // Jump
+        if (Input.GetKeyDown(KeyCode.Space) && !isKnockedBack)
         {
             if (isClimbing)
             {
@@ -95,7 +100,10 @@ public class Player_Controller : MonoBehaviour
 
     void FixedUpdate()
     {
-        // أثناء التسلق
+        // ❌ أثناء الضربة: لا حركة
+        if (isKnockedBack) return;
+
+        // Climbing
         if (isClimbing)
         {
             float vertical = Input.GetAxis("Vertical");
@@ -103,7 +111,7 @@ public class Player_Controller : MonoBehaviour
             return;
         }
 
-        // حركة أفقية عادية
+        // Horizontal movement
         float moveX = Input.GetAxis("Horizontal");
         float speed = isCrouching ? moveSpeed * 0.5f : moveSpeed;
 
@@ -112,7 +120,7 @@ public class Player_Controller : MonoBehaviour
         if (moveX != 0)
             sr.flipX = moveX < 0;
 
-        // تطبيق الانحناء بالقيم اليدوية
+        // Crouch collider
         if (isCrouching)
         {
             col.size = new Vector2(col.size.x, crouchColliderHeight);
@@ -125,7 +133,7 @@ public class Player_Controller : MonoBehaviour
         }
     }
 
-    // ====== تسلق ======
+    // ================= CLIMB =================
 
     public void EnterClimbArea()
     {
@@ -135,7 +143,6 @@ public class Player_Controller : MonoBehaviour
     public void ExitClimbArea()
     {
         isInClimbArea = false;
-
         if (isClimbing)
             StopClimbing();
     }
@@ -155,7 +162,28 @@ public class Player_Controller : MonoBehaviour
         rb.gravityScale = originalGravity;
     }
 
-    // Gizmo لرؤية GroundCheck
+    // ================= KNOCKBACK =================
+
+    public void ApplyKnockback(Vector2 force)
+    {
+        if (isKnockedBack) return;
+
+        StartCoroutine(KnockbackCoroutine(force));
+    }
+
+    IEnumerator KnockbackCoroutine(Vector2 force)
+    {
+        isKnockedBack = true;
+        rb.velocity = Vector2.zero;
+        rb.AddForce(force, ForceMode2D.Impulse);
+
+        yield return new WaitForSeconds(knockbackDuration);
+
+        isKnockedBack = false;
+    }
+
+    // ================= GIZMO =================
+
     void OnDrawGizmosSelected()
     {
         if (!groundCheck) return;
